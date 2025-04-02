@@ -66,6 +66,7 @@ func TestReorder(t *testing.T) {
 		dmark  int
 		window int64
 		steps  []stepT
+		opts   []ROpt
 	}{
 		"empty": {},
 		"single": {
@@ -157,6 +158,55 @@ func TestReorder(t *testing.T) {
 			steps: steps(step(1), step(4), step(3), step(2), step(12, 1, 2)),
 			dmark: 2,
 		},
+		"memory limit in order": {
+			steps: steps(step(1), step(2, 1)),
+			opts:  []ROpt{WithMemoryLimit(100)},
+		},
+		"memory limit in order with done": {
+			steps: steps(step(1), step(2, 1)),
+			opts:  []ROpt{WithMemoryLimit(100)},
+			dmark: 1,
+		},
+		"memory limit out of order": {
+			steps: steps(step(5), step(2, 2)),
+			opts:  []ROpt{WithMemoryLimit(100)},
+		},
+		"memory limit out of order with done": {
+			steps: steps(step(5), step(2, 2)),
+			opts:  []ROpt{WithMemoryLimit(100)},
+			dmark: 1,
+		},
+		"memory limit multiple out of order ": {
+			steps: steps(step(5), step(2, 2), step(3, 3)),
+			opts:  []ROpt{WithMemoryLimit(100)},
+		},
+		"memory limit multiple out of order with done": {
+			steps: steps(step(5), step(2, 2), step(3, 3)),
+			opts:  []ROpt{WithMemoryLimit(100)},
+			dmark: 2,
+		},
+		"wide memory limit in order": {
+			steps: steps(step(1), step(2), step(3), step(4, 1)),
+			opts:  []ROpt{WithMemoryLimit(300)},
+		},
+		"wide memory limit in order with done": {
+			steps: steps(step(1), step(2), step(3), step(4, 1)),
+			opts:  []ROpt{WithMemoryLimit(300)},
+			dmark: 1,
+		},
+		"wide memory limit out of order": {
+			steps: steps(step(5), step(4), step(2), step(3, 2)),
+			opts:  []ROpt{WithMemoryLimit(300)},
+		},
+		"wide memory limit out of order with done": {
+			steps: steps(step(5), step(4), step(2), step(3, 2), step(6, 3)),
+			opts:  []ROpt{WithMemoryLimit(300)},
+			dmark: 2,
+		},
+		"memory limit shifts window to the right": {
+			steps: steps(step(10), step(11), step(12), step(13, 10), step(9), flush(11, 12, 13)),
+			opts:  []ROpt{WithMemoryLimit(300)},
+		},
 	}
 
 	for name, tc := range tests {
@@ -175,7 +225,7 @@ func TestReorder(t *testing.T) {
 				return tc.dmark > 0 && markCnt >= tc.dmark
 			}
 
-			rw, err := NewReorder(10, cb)
+			rw, err := NewReorder(10, cb, tc.opts...)
 			if err != nil {
 				t.Fatalf("Expected nil error, got: %v", err)
 			}
