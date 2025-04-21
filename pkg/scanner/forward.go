@@ -33,35 +33,25 @@ LOOP:
 	for scanner.Scan() {
 
 		entry, parseErr := parseF(scanner.Bytes())
-		if parseErr != nil {
+
+		switch {
+		case parseErr != nil:
 			if err := errF(scanner.Bytes(), parseErr); err != nil {
 				return err
 			}
-			continue
-		}
-
-		if entry.Timestamp > o.stop {
+		case entry.Timestamp > o.stop:
 			break LOOP
-		}
-
-		if scanF(entry) {
+		case scanF(entry):
 			break LOOP
 		}
 	}
 
-	if flushF != nil {
-		flushF()
-	}
+	flushF()
 
 	return scanner.Err()
 }
 
-type flushFuncT func() bool
-
-func bindCallbacks(scanF ScanFuncT, o scanOpt) (ScanFuncT, ErrFuncT, flushFuncT) {
-	if !o.fold {
-		return scanF, o.errF, nil
-	}
-
-	return bindFold(scanF, o.errF)
+func bindCallbacks(scanF ScanFuncT, o scanOpt) (ScanFuncT, ErrFuncT, FlushFuncT) {
+	chain := o.bindProcessors(scanF)
+	return chain.ScanF, chain.ErrF, chain.FlushF
 }

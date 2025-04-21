@@ -18,6 +18,8 @@ package scanner
 // the lists are generally well ordered, but will be inefficient
 // if the order is random.
 
+// WARNING: Does not work with reverse scans.
+
 import (
 	"errors"
 	"math"
@@ -27,12 +29,17 @@ import (
 )
 
 var (
-	ErrInvalidWindow   = errors.New("invalid window")
-	ErrInvalidCallback = errors.New("invalid callback")
+	ErrInvalidWindow = errors.New("invalid window")
 )
 
+func stubScanFunc(entry LogEntry) bool {
+	log.Warn().Msg("Unchained scan function called")
+	return true
+}
+
 type ReorderT struct {
-	cb     ScanFuncT
+	scanF  ScanFuncT
+	flushF FlushFuncT
 	window int64
 	clock  int64
 	mUsed  int
@@ -77,18 +84,15 @@ func parseROpts(opts ...ROpt) roptT {
 // this shift is that a subsequent out of order event may be
 // dropped because it no longer falls within the shifted window.
 
-func NewReorder(window int64, cb ScanFuncT, opts ...ROpt) (*ReorderT, error) {
+func NewReorder(window int64, opts ...ROpt) (*ReorderT, error) {
 	o := parseROpts(opts...)
 
 	if window <= 0 {
 		return nil, ErrInvalidWindow
 	}
-	if cb == nil {
-		return nil, ErrInvalidCallback
-	}
 
 	return &ReorderT{
-		cb:     cb,
+		scanF:  stubScanFunc,
 		window: window,
 		mLimit: o.memlimit,
 		inList: newRList(),
@@ -102,6 +106,15 @@ func (r *ReorderT) Append(entry LogEntry) (done bool) {
 		done = r._trim()
 	}
 	return
+}
+
+func (r *ReorderT) ChainProcessor(chain ScanProcessorT) ScanProcessorT {
+
+	r.scanF = chain.ScanF
+	r.flushF = chain.FlushF
+	chain.ScanF = r.Append
+	chain.FlushF = r.Flush
+	return chain
 }
 
 func (r *ReorderT) _append(entry LogEntry) bool {
@@ -141,7 +154,7 @@ func (r *ReorderT) fastPath() bool {
 		}
 
 		r.mUsed -= head.Size()
-		if done := r.cb(head.entry); done {
+		if done := r.scanF(head.entry); done {
 			r.drain()
 			return true
 		}
@@ -172,7 +185,7 @@ func (r *ReorderT) slowPath(ooTimestamp int64) bool {
 		for ooTimestamp < inHead.entry.Timestamp {
 			var (
 				node = r.ooList.popFront()
-				done = r.cb(node.entry)
+				done = r.scanF(node.entry)
 			)
 			r.mUsed -= node.Size()
 			rPoolFree(node)
@@ -191,7 +204,7 @@ func (r *ReorderT) slowPath(ooTimestamp int64) bool {
 
 		// Deliver the inHead entry
 		r.mUsed -= inHead.Size()
-		if done := r.cb(inHead.entry); done {
+		if done := r.scanF(inHead.entry); done {
 			r.drain()
 			return true
 		}
@@ -205,7 +218,7 @@ func (r *ReorderT) slowPath(ooTimestamp int64) bool {
 	for ooTimestamp <= deadline {
 		var (
 			node = r.ooList.popFront()
-			done = r.cb(node.entry)
+			done = r.scanF(node.entry)
 		)
 		r.mUsed -= node.Size()
 		rPoolFree(node)
@@ -252,7 +265,7 @@ LOOP:
 		for ooTimestamp < inHead.entry.Timestamp {
 			var (
 				node = r.ooList.popFront()
-				done = r.cb(node.entry)
+				done = r.scanF(node.entry)
 			)
 			r.mUsed -= node.Size()
 			r.clock = node.entry.Timestamp + r.window
@@ -276,7 +289,7 @@ LOOP:
 			}
 		}
 
-		done := r.cb(inHead.entry)
+		done := r.scanF(inHead.entry)
 		r.mUsed -= inHead.Size()
 		r.clock = inHead.entry.Timestamp + r.window
 		r.inList.remove(inHead)
@@ -301,7 +314,7 @@ LOOP:
 LOOP2:
 	for node := r.ooList.popFront(); node != nil; node = r.ooList.popFront() {
 
-		done := r.cb(node.entry)
+		done := r.scanF(node.entry)
 		r.mUsed -= node.Size()
 		r.clock = node.entry.Timestamp + r.window
 		rPoolFree(node)
@@ -334,7 +347,11 @@ func (r *ReorderT) AdvanceClock(stamp int64) bool {
 func (r *ReorderT) Flush() (done bool) {
 	done = r.AdvanceClock(math.MaxInt64)
 	r.drain()
-	return done
+
+	if !done && r.flushF != nil {
+		done = r.flushF()
+	}
+	return
 }
 
 // O(n): Maintain order invariant on insert.

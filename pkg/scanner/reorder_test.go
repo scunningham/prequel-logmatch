@@ -21,16 +21,11 @@ func TestRecordBadParams(t *testing.T) {
 			window: -1,
 			cb:     nil,
 		},
-		"nil callback": {
-			err:    ErrInvalidCallback,
-			window: 10,
-			cb:     nil,
-		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			rw, err := NewReorder(tc.window, tc.cb)
+			rw, err := NewReorder(tc.window)
 			if rw != nil {
 				t.Fatalf("Expected nil reorder, got %v", rw)
 			}
@@ -236,10 +231,12 @@ func TestReorder(t *testing.T) {
 				return tc.dmark > 0 && markCnt >= tc.dmark
 			}
 
-			rw, err := NewReorder(10, cb, tc.opts...)
+			rw, err := NewReorder(10, tc.opts...)
 			if err != nil {
 				t.Fatalf("Expected nil error, got: %v", err)
 			}
+
+			rw.ChainProcessor(ScanProcessorT{ScanF: cb})
 
 			var (
 				expectMark = 0
@@ -313,10 +310,12 @@ func TestAdvanceClock(t *testing.T) {
 		entries = append(entries, entry)
 		return false
 	}
-	rw, err := NewReorder(10, cb)
+	rw, err := NewReorder(10)
 	if err != nil {
 		t.Fatalf("Expected nil error, got: %v", err)
 	}
+
+	rw.ChainProcessor(ScanProcessorT{ScanF: cb})
 
 	rw.Append(LogEntry{Timestamp: 1})
 	if rw.clock != 1 {
@@ -356,10 +355,12 @@ func BenchmarkInOrder(b *testing.B) {
 	cb := func(entry LogEntry) bool {
 		return false
 	}
-	rw, err := NewReorder(10, cb)
+	rw, err := NewReorder(10)
 	if err != nil {
 		b.Fatalf("Expected nil error, got: %v", err)
 	}
+
+	rw.ChainProcessor(ScanProcessorT{ScanF: cb})
 
 	for i := 0; i < b.N; i++ {
 		rw.Append(LogEntry{Timestamp: int64(i), Line: "benchmark"})
@@ -372,10 +373,12 @@ func BenchmarkOutOfOrder(b *testing.B) {
 		return false
 	}
 
-	rw, err := NewReorder(10, cb)
+	rw, err := NewReorder(10)
 	if err != nil {
 		b.Fatalf("Expected nil error, got: %v", err)
 	}
+
+	rw.ChainProcessor(ScanProcessorT{ScanF: cb})
 
 	for i := 0; i < b.N; i++ {
 		if i > 10 && i%5 == 0 {

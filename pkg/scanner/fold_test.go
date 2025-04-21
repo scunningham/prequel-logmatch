@@ -127,7 +127,7 @@ func TestFold(t *testing.T) {
 				return false
 			}
 
-			err := ScanForward(rdr, parser.ReadEntry, scanF, WithFold(true))
+			err := ScanForward(rdr, parser.ReadEntry, scanF, WithProcessor(NewFoldProcessor()))
 			if err != nil {
 				t.Fatalf("ScanForward() failed: %v", err)
 			}

@@ -20,6 +20,8 @@ func ScanReverse(src io.ReaderAt, parseF ParseFuncT, scanF ScanFuncT, opts ...Sc
 		scanner = backscanner.NewOptions(src, int(o.mark), &bopts)
 	)
 
+	scanF, errF, flushF := bindCallbacks(scanF, o)
+
 	stop := o.stop
 	if stop == math.MaxInt64 {
 		stop = 0
@@ -40,21 +42,20 @@ LOOP:
 		}
 
 		entry, parseErr := parseF(line)
-		if parseErr != nil {
-			if err := o.errF(line, parseErr); err != nil {
+
+		switch {
+		case parseErr != nil:
+			if err := errF(line, parseErr); err != nil {
 				return err
 			}
-			continue
-		}
-
-		if entry.Timestamp < stop {
+		case entry.Timestamp < stop:
 			break LOOP
-		}
-
-		if scanF(entry) {
+		case scanF(entry):
 			break LOOP
 		}
 	}
+
+	flushF()
 
 	return err
 }

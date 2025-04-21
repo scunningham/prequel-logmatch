@@ -19,33 +19,15 @@ const (
 type ParseFuncT func([]byte) (LogEntry, error)
 type ScanFuncT func(entry LogEntry) bool
 type ErrFuncT func([]byte, error) error
+type FlushFuncT func() bool
 type ScanOptT func(*scanOpt)
 
 type scanOpt struct {
-	maxSz int
-	fold  bool
-	start int64
-	stop  int64
-	mark  int64
-	errF  ErrFuncT
-}
-
-func defaultErrFunc(line []byte, err error) error {
-	// Tolerate badly formed lines
-	log.Error().
-		Err(err).
-		Str("line", string(line)).
-		Msg("Fail parse.  Continue...")
-	return nil
-}
-
-func foldErrFunc(line []byte, err error) error {
-	// Tolerate badly formed lines
-	log.Trace().
-		Err(err).
-		Str("line", string(line)).
-		Msg("Fail line parse; appended to pending")
-	return nil
+	maxSz      int
+	start      int64
+	stop       int64
+	mark       int64
+	processors []ScanProcessorI
 }
 
 func parseOpts(opts []ScanOptT) scanOpt {
@@ -58,23 +40,7 @@ func parseOpts(opts []ScanOptT) scanOpt {
 		opt(&o)
 	}
 
-	switch {
-	case o.errF != nil:
-		// User specified error function; continue.
-	case o.fold:
-		// defaultErrFunc is too verbose for folded scans.
-		o.errF = foldErrFunc
-	default:
-		o.errF = defaultErrFunc
-	}
-
 	return o
-}
-
-func WithFold(fold bool) ScanOptT {
-	return func(o *scanOpt) {
-		o.fold = fold
-	}
 }
 
 func WithMaxSize(maxSz int) ScanOptT {
@@ -114,8 +80,47 @@ func WithMark(mark int64) ScanOptT {
 	}
 }
 
-func WithErrFunc(errF ErrFuncT) ScanOptT {
+func WithProcessor(processor ScanProcessorI) ScanOptT {
 	return func(o *scanOpt) {
-		o.errF = errF
+		o.processors = append(o.processors, processor)
 	}
+}
+
+func defaultErrFunc(line []byte, err error) error {
+	// Tolerate badly formed lines
+	log.Debug().
+		Err(err).
+		Str("line", string(line)).
+		Msg("Fail parse.  Continue...")
+	return nil
+}
+
+func defaultFlushFunc() bool {
+	return false
+}
+
+func (o *scanOpt) bindProcessors(scanF ScanFuncT) ScanProcessorT {
+	chain := ScanProcessorT{
+		ErrF:   defaultErrFunc,
+		ScanF:  scanF,
+		FlushF: defaultFlushFunc,
+	}
+
+	// Stack in order of processor registration
+	// to allow for chaining of processors.
+	for _, p := range o.processors {
+		chain = p.Chain(chain)
+	}
+
+	return chain
+}
+
+type ScanProcessorT struct {
+	ErrF   ErrFuncT
+	ScanF  ScanFuncT
+	FlushF FlushFuncT
+}
+
+type ScanProcessorI interface {
+	Chain(ScanProcessorT) ScanProcessorT
 }

@@ -1,18 +1,29 @@
 package scanner
 
+// WARNING: Does not work with reverse scans.
+
 import (
 	"strings"
 	"unicode/utf8"
 )
 
-func bindFold(scanF ScanFuncT, errF ErrFuncT) (ScanFuncT, ErrFuncT, flushFuncT) {
+type FoldProcessor struct {
+}
+
+func NewFoldProcessor() *FoldProcessor {
+	return &FoldProcessor{}
+}
+
+func (p *FoldProcessor) Chain(chain ScanProcessorT) (nChain ScanProcessorT) {
+	// Chain the processor to the scan function
+	// and return the new chain.
 
 	var (
 		pending LogEntry
 		builder strings.Builder
 	)
 
-	nScanF := func(entry LogEntry) (done bool) {
+	nChain.ScanF = func(entry LogEntry) (done bool) {
 		// Cache on first spin
 		if pending.Timestamp == 0 {
 			pending = entry
@@ -25,7 +36,7 @@ func bindFold(scanF ScanFuncT, errF ErrFuncT) (ScanFuncT, ErrFuncT, flushFuncT) 
 		}
 
 		// Scan pending entry
-		switch done = scanF(pending); done {
+		switch done = chain.ScanF(pending); done {
 		case true:
 			// Scan done; avoid emit on flush
 			pending.Timestamp = 0
@@ -38,7 +49,7 @@ func bindFold(scanF ScanFuncT, errF ErrFuncT) (ScanFuncT, ErrFuncT, flushFuncT) 
 	}
 
 	// On error, append line to pending entry
-	nErrF := func(line []byte, err error) error {
+	nChain.ErrF = func(line []byte, err error) error {
 		switch {
 		case !utf8.Valid(line):
 			// Data is not valid UTF8; ignore.
@@ -53,20 +64,23 @@ func bindFold(scanF ScanFuncT, errF ErrFuncT) (ScanFuncT, ErrFuncT, flushFuncT) 
 			builder.Write(line)
 		}
 
-		return errF(line, err)
+		return chain.ErrF(line, err)
 	}
 
 	// On final flush, emit pending entry if exists
-	nFlushF := func() (done bool) {
+	nChain.FlushF = func() (done bool) {
 		if pending.Timestamp != 0 {
 			if builder.Len() > 0 {
 				pending.Line = builder.String()
 				builder.Reset()
 			}
-			done = scanF(pending)
+			done = chain.ScanF(pending)
+		}
+		if !done {
+			done = chain.FlushF()
 		}
 		return
 	}
 
-	return nScanF, nErrF, nFlushF
+	return
 }
