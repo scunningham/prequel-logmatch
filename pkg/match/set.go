@@ -176,6 +176,9 @@ func buildSetTerms(setTerms ...TermT) ([]termT, map[int]int, error) {
 		terms   = make([]termT, 0, nTerms)
 	)
 
+	// Increment the dupe count for a given index.
+	// The set algorithm expects dupeCnt at index to the the total of terms, not extra dupes.
+	// So instead of storing 1 for a single dupe, store 2.
 	incDupeMap := func(idx int) {
 
 		v, ok := dupeMap[idx]
