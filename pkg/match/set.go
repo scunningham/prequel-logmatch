@@ -164,50 +164,50 @@ func (r *MatchSet) Eval(clock int64) (h Hits) {
 
 func buildSetTerms(setTerms ...TermT) ([]termT, map[int]int, error) {
 
-	var (
-		nTerms = len(setTerms)
-		uniqs  = make(map[TermT]int, nTerms)
-	)
-
-	// First pass to get unique term counts
-	for _, term := range setTerms {
-		uniqs[term]++
-	}
-
-	// Sanity checks
-	switch {
-	case len(uniqs) > maxTerms:
-		return nil, nil, ErrTooManyTerms
-	case len(uniqs) == 0:
+	if len(setTerms) == 0 {
 		return nil, nil, ErrNoTerms
 	}
 
 	var (
+		i       int
+		nTerms  = len(setTerms)
 		dupeMap map[int]int
-		terms   = make([]termT, 0, len(uniqs)) // Slice is exact size of unique terms
+		uniqs   = make(map[TermT]int, nTerms)
+		terms   = make([]termT, 0, nTerms)
 	)
 
-	if len(uniqs) < nTerms {
-		// We have dupes; need to track them
-		dupeMap = make(map[int]int)
+	// O(n) on nTerms
+	for _, term := range setTerms {
+
+		if idx, ok := uniqs[term]; ok {
+			if dupeMap == nil {
+				dupeMap = make(map[int]int)
+			}
+			v, ok := dupeMap[idx]
+			if !ok {
+				v = 1
+			}
+			dupeMap[idx] = v + 1
+		} else {
+			m, err := term.NewMatcher()
+			if err != nil {
+				return nil, nil, err
+			}
+			terms = append(terms, termT{matcher: m})
+			uniqs[term] = i
+			i += 1
+		}
 	}
 
-	// Iterate over the unique terms build the matcher list
-	i := 0
-	for term, cnt := range uniqs {
+	if len(terms) > maxTerms {
+		return nil, nil, ErrTooManyTerms
+	}
 
-		m, err := term.NewMatcher()
-		if err != nil {
-			return nil, nil, err
-		}
-
-		terms = append(terms, termT{matcher: m})
-
-		if cnt > 1 {
-			dupeMap[i] = cnt
-		}
-
-		i++
+	// Check if over allocated due to dupes
+	if cap(terms) > len(terms) {
+		nTerms := make([]termT, len(terms))
+		copy(nTerms, terms)
+		terms = nTerms
 	}
 
 	return terms, dupeMap, nil

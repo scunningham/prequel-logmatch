@@ -256,6 +256,10 @@ func buildSeqTerms(seqTerms ...TermT) ([]termT, map[int]int, error) {
 		}
 	}
 
+	if len(terms) > maxTerms {
+		return nil, nil, ErrTooManyTerms
+	}
+
 	// Check if over allocated due to dupes
 	if cap(terms) > len(terms) {
 		nTerms := make([]termT, len(terms))
