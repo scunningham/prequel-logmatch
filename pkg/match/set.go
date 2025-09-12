@@ -176,18 +176,27 @@ func buildSetTerms(setTerms ...TermT) ([]termT, map[int]int, error) {
 		terms   = make([]termT, 0, nTerms)
 	)
 
+	incDupeMap := func(idx int) {
+
+		v, ok := dupeMap[idx]
+
+		switch {
+		case ok:
+			v += 1
+		case dupeMap == nil:
+			dupeMap = make(map[int]int)
+			fallthrough
+		default:
+			v = 2
+		}
+		dupeMap[idx] = v
+	}
+
 	// O(n) on nTerms
 	for _, term := range setTerms {
 
 		if idx, ok := uniqs[term]; ok {
-			if dupeMap == nil {
-				dupeMap = make(map[int]int)
-			}
-			v, ok := dupeMap[idx]
-			if !ok {
-				v = 1
-			}
-			dupeMap[idx] = v + 1
+			incDupeMap(idx)
 		} else {
 			m, err := term.NewMatcher()
 			if err != nil {
