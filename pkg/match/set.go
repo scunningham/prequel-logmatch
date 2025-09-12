@@ -12,58 +12,16 @@ type MatchSet struct {
 	clock   int64
 	window  int64
 	gcMark  int64
-	hotMask bitMaskT
 	terms   []termT
+	hotMask bitMaskT
 	dupeMap map[int]int
 }
 
 func NewMatchSet(window int64, setTerms ...TermT) (*MatchSet, error) {
 
-	var (
-		dupeMap map[int]int
-		nTerms  = len(setTerms)
-		dupes   = make(map[TermT]int, nTerms)
-		terms   = make([]termT, 0, nTerms)
-	)
-
-	switch {
-	case nTerms > maxTerms:
-		return nil, ErrTooManyTerms
-	case nTerms == 0:
-		return nil, ErrNoTerms
-	}
-
-	// First pass to get term counts
-	for _, term := range setTerms {
-		dupes[term]++
-	}
-
-	// Iterate over the terms again to build the matcher list
-	for i, term := range setTerms {
-
-		cnt := dupes[term]
-
-		if cnt >= 1 {
-
-			m, err := term.NewMatcher()
-			if err != nil {
-				return nil, err
-			}
-
-			terms = append(terms, termT{matcher: m})
-
-			if cnt > 1 {
-
-				// We have a dupe; add it to the dupeMap
-				if dupeMap == nil {
-					dupeMap = make(map[int]int)
-				}
-				dupeMap[i] = cnt
-
-				// Delete term from the map to prevent adding it again
-				delete(dupes, term)
-			}
-		}
+	terms, dupeMap, err := buildSetTerms(setTerms...)
+	if err != nil {
+		return nil, err
 	}
 
 	return &MatchSet{
@@ -202,4 +160,55 @@ func (r *MatchSet) GarbageCollect(clock int64) {
 // Because match sequence is edge triggered, there won't be hits.  But can GC.
 func (r *MatchSet) Eval(clock int64) (h Hits) {
 	return
+}
+
+func buildSetTerms(setTerms ...TermT) ([]termT, map[int]int, error) {
+
+	var (
+		nTerms = len(setTerms)
+		uniqs  = make(map[TermT]int, nTerms)
+	)
+
+	// First pass to get unique term counts
+	for _, term := range setTerms {
+		uniqs[term]++
+	}
+
+	// Sanity checks
+	switch {
+	case len(uniqs) > maxTerms:
+		return nil, nil, ErrTooManyTerms
+	case len(uniqs) == 0:
+		return nil, nil, ErrNoTerms
+	}
+
+	var (
+		dupeMap map[int]int
+		terms   = make([]termT, 0, len(uniqs))
+	)
+
+	if len(uniqs) < nTerms {
+		// We have dupes; need to track them
+		dupeMap = make(map[int]int)
+	}
+
+	// Iterate over the unique terms build the matcher list
+	i := 0
+	for term, cnt := range uniqs {
+
+		m, err := term.NewMatcher()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		terms = append(terms, termT{matcher: m})
+
+		if cnt > 1 {
+			dupeMap[i] = cnt
+		}
+
+		i++
+	}
+
+	return terms, dupeMap, nil
 }

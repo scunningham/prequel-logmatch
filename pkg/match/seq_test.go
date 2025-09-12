@@ -539,3 +539,18 @@ func BenchmarkSeqRunawayMatch(b *testing.B) {
 		sm.Scan(ev1)
 	}
 }
+
+func testEqualLogs(t *testing.T, a, b []LogEntry) bool {
+
+	if len(a) != len(b) {
+		t.Errorf("Expected logs length %v, got %v", len(a), len(b))
+		return false
+	}
+	for i := range a {
+		if a[i].Line != b[i].Line || a[i].Timestamp != b[i].Timestamp {
+			t.Errorf("Expected log entry %v, got %v", a[i], b[i])
+			return false
+		}
+	}
+	return true
+}

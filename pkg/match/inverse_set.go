@@ -23,54 +23,13 @@ type InverseSet struct {
 
 func NewInverseSet(window int64, setTerms []TermT, resetTerms []ResetT) (*InverseSet, error) {
 
-	var (
-		resets  []resetT
-		dupeMap map[int]int
-		nTerms  = len(setTerms)
-		dupes   = make(map[TermT]int, nTerms)
-		terms   = make([]termT, 0, nTerms)
-	)
-
-	switch {
-	case nTerms > maxTerms:
-		return nil, ErrTooManyTerms
-	case nTerms == 0:
-		return nil, ErrNoTerms
+	terms, dupeMap, err := buildSetTerms(setTerms...)
+	if err != nil {
+		return nil, err
 	}
 
-	// First pass to get term counts
-	for _, term := range setTerms {
-		dupes[term]++
-	}
-
-	// Iterate over the terms again to build the matcher list
-	for i, term := range setTerms {
-
-		cnt := dupes[term]
-
-		if cnt >= 1 {
-
-			m, err := term.NewMatcher()
-			if err != nil {
-				return nil, err
-			}
-
-			terms = append(terms, termT{matcher: m})
-
-			if cnt > 1 {
-
-				// We have a dupe; add it to the dupeMap
-				if dupeMap == nil {
-					dupeMap = make(map[int]int)
-				}
-				dupeMap[i] = cnt
-
-				// Delete term from the map to prevent adding it again
-				delete(dupes, term)
-			}
-		}
-	}
-
+	// Init reset terms
+	var resets []resetT
 	if len(resetTerms) > 0 {
 		resets = make([]resetT, 0, len(resetTerms))
 
@@ -79,7 +38,7 @@ func NewInverseSet(window int64, setTerms []TermT, resetTerms []ResetT) (*Invers
 			switch {
 			case err != nil:
 				return nil, err
-			case int(term.Anchor) >= len(setTerms):
+			case int(term.Anchor) >= len(setTerms): // This includes dupes.
 				return nil, ErrAnchorRange
 			}
 
@@ -92,6 +51,7 @@ func NewInverseSet(window int64, setTerms []TermT, resetTerms []ResetT) (*Invers
 			})
 		}
 	}
+	// Calculate GC windows
 	gcLeft, gcRight := calcGCWindow(window, resets)
 
 	return &InverseSet{
