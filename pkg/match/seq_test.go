@@ -254,7 +254,7 @@ func TestSeq(t *testing.T) {
 			},
 		},
 
-		"FireDisjointMultiples": {
+		"FireDisjointMultiplesSecondNotDuped": {
 			// -12-456-89---------- dupe
 			// --2-456-89---------- dupe
 			// ---3---7------------ disjoint
@@ -275,6 +275,29 @@ func TestSeq(t *testing.T) {
 				{line: "8_dupe"},
 				{line: "9_dupe"},
 				{line: "A_fire", cb: matchLines("5_dupe", "6_dupe", "7_disjoint", "8_dupe", "9_dupe", "A_fire")},
+			},
+		},
+
+		"FireDisjointMultiple": {
+			// -12-456-89---------- dupe
+			// --2-456-89---------- dupe
+			// ---3---7------------ disjoint
+			// ----456-89---------- dupe
+			// ----------A--------- fire
+			// Should fire {5,6,7,8,9,A}
+			window: 5,
+			terms:  []string{"dupe", "dupe", "disjoint", "dupe", "fire"},
+			steps: []step{
+				{line: "1_dupe"},
+				{line: "2_dupe"},
+				{line: "3_disjoint"},
+				{line: "4_dupe"},
+				{line: "5_dupe"},
+				{line: "6_dupe"},
+				{line: "7_disjoint"},
+				{line: "8_dupe"},
+				{line: "9_dupe"},
+				{line: "A_fire", cb: matchLines("5_dupe", "6_dupe", "7_disjoint", "8_dupe", "A_fire")},
 			},
 		},
 

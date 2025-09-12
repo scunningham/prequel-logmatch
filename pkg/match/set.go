@@ -184,7 +184,7 @@ func buildSetTerms(setTerms ...TermT) ([]termT, map[int]int, error) {
 
 	var (
 		dupeMap map[int]int
-		terms   = make([]termT, 0, len(uniqs))
+		terms   = make([]termT, 0, len(uniqs)) // Slice is exact size of unique terms
 	)
 
 	if len(uniqs) < nTerms {
