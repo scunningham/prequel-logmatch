@@ -255,3 +255,17 @@ func TestSetEmptyTerm(t *testing.T) {
 		t.Fatalf("Expected err == ErrTermEmpty, got %v", err)
 	}
 }
+
+func TestSetNoops(t *testing.T) {
+	m, err := NewMatchSet(10, TermT{Type: TermRaw, Value: "apple"})
+	if err != nil {
+		t.Fatalf("Failed to create matcher: %v", err)
+	}
+
+	hits := m.Eval(12345)
+	if hits.Cnt != 0 {
+		t.Errorf("Expected 0 hit, got %d", hits.Cnt)
+	}
+
+	m.GarbageCollect(12345)
+}

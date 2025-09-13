@@ -82,7 +82,6 @@ func (r *MatchSeq) Scan(e LogEntry) (hits Hits) {
 	}
 
 	// We have a full frame; fire and prune.
-
 	hits.Cnt = 1
 	hits.Logs = make([]LogEntry, 0, len(r.terms)+r.dupeMap[-1])
 

@@ -1,6 +1,7 @@
 package match
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -196,6 +197,35 @@ func TestSeq(t *testing.T) {
 			},
 		},
 
+		"SingleLineDupes": {
+			// -123----------- dupe
+			// --23----------- dupe
+			// ---3----------- dupe
+			window: 10,
+			terms:  []string{"dupe", "dupe", "dupe"},
+			steps: []step{
+				{line: "dupe1"},
+				{line: "dupe2"},
+				{line: "dupe3", cb: matchLines("dupe1", "dupe2", "dupe3")},
+			},
+		},
+
+		"MultiLineDupes": {
+			// -12----------- first
+			// --2----------- first
+			// ---34--------- second
+			// ----4--------- second
+			// Should fire {1,2,3,4}
+			window: 10,
+			terms:  []string{"first", "first", "second", "second"},
+			steps: []step{
+				{line: "first1"},
+				{line: "first2"},
+				{line: "second1"},
+				{line: "second2", cb: matchLines("first1", "first2", "second1", "second2")},
+			},
+		},
+
 		"FireMultiplesProperlyWithWindowMiss": {
 			// -12345------------ dupe
 			// --2345------------ dupe
@@ -383,20 +413,47 @@ func TestSeq(t *testing.T) {
 	}
 }
 
-// ----------
+func TestSequenceNoTerms(t *testing.T) {
+	_, err := NewMatchSeq(0)
+	if err != ErrNoTerms {
+		t.Fatalf("Expected err == nil, got %v", err)
+	}
+}
 
-func BenchmarkSequenceMisses(b *testing.B) {
-	sm, err := NewMatchSeq(int64(time.Second), makeTermsA("frank", "burns")...)
-	if err != nil {
-		b.Fatalf("Expected err == nil, got %v", err)
+func TestSequenceTermLimit(t *testing.T) {
+
+	terms := make([]TermT, 64)
+	for i := range terms {
+		terms[i] = TermT{Type: TermRaw, Value: fmt.Sprintf("term %d", i)}
 	}
 
-	noop := LogEntry{Line: "NOOP", Timestamp: time.Now().UnixNano()}
+	if _, err := NewMatchSeq(1000, terms...); err != nil {
+		t.Fatalf("Expected err == nil, got %v", err)
+	}
 
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		noop.Timestamp += 1
-		sm.Scan(noop)
+	// Now add some dupes, should be ok
+	lastTerm := terms[len(terms)-1]
+	for i := 0; i < 1000; i++ {
+		terms = append(terms, lastTerm)
+	}
+
+	if _, err := NewMatchSeq(1000, terms...); err != nil {
+		t.Fatalf("Expected err == nil, got %v", err)
+	}
+
+	// However, one more non-dupe term will put us over the top
+	terms = append(terms, TermT{Type: TermRaw, Value: "one too many"})
+	if _, err := NewMatchSeq(1000, terms...); err != ErrTooManyTerms {
+		t.Fatalf("Expected err == ErrTooManyTerms, got %v", err)
+	}
+}
+
+func TestBadTerm(t *testing.T) {
+	term := TermT{Type: TermRaw, Value: ""}
+	_, err := NewMatchSeq(1000, term)
+
+	if err != ErrTermEmpty {
+		t.Fatalf("Expected err == ErrTermEmpty, got %v", err)
 	}
 }
 
@@ -453,19 +510,19 @@ func TestSeqDupeTimestamps(t *testing.T) {
 	}
 }
 
-func fireNoops(t *testing.T, sm Matcher, n int) {
-	// Just for fun, fire some noops
-	for i := 0; i < n; i++ {
-		hits := sm.Scan(LogEntry{Timestamp: time.Now().UnixNano(), Line: "NOOP"})
-
-		if hits.Cnt != 0 {
-			t.Errorf("Expected hits.Cnt == 0, got %v", hits.Cnt)
-		}
-
-		if hits.Logs != nil {
-			t.Fatalf("Expected nil hits.Logs")
-		}
+func TestSeqNOOPs(t *testing.T) {
+	sm, err := NewMatchSeq(int64(time.Second), makeTermsA("frank", "burns")...)
+	if err != nil {
+		t.Fatalf("Expected err == nil, got %v", err)
 	}
+
+	hits := sm.Scan(entry.LogEntry{Line: "NOOP"})
+	testNoFire(t, hits)
+
+	hits = sm.Eval(time.Now().UnixNano())
+	testNoFire(t, hits)
+
+	sm.GarbageCollect(time.Now().UnixNano())
 }
 
 func testNoFire(t *testing.T, hits Hits) {
@@ -478,12 +535,20 @@ func testNoFire(t *testing.T, hits Hits) {
 	}
 }
 
-// Expect clean internal state
-func expectCleanState(t *testing.T, sm *MatchSeq) {
+// ----------
 
-	// Check internal state
-	if sm.nActive != 0 {
-		t.Errorf("Expected clean state, got %v", sm.nActive)
+func BenchmarkSequenceMisses(b *testing.B) {
+	sm, err := NewMatchSeq(int64(time.Second), makeTermsA("frank", "burns")...)
+	if err != nil {
+		b.Fatalf("Expected err == nil, got %v", err)
+	}
+
+	noop := LogEntry{Line: "NOOP", Timestamp: time.Now().UnixNano()}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		noop.Timestamp += 1
+		sm.Scan(noop)
 	}
 }
 
