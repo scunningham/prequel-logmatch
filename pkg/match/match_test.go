@@ -1,6 +1,7 @@
 package match
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -24,6 +25,56 @@ func TestMatchJson(t *testing.T) {
 	// Sad path
 	if m(`{"nope":"apple"}`) {
 		t.Errorf("Expected no match, got match.")
+	}
+
+	// Error path
+	if m(`not json`) {
+		t.Errorf("Expected no match, got match.")
+	}
+}
+
+func TestMatchJsonHalt(t *testing.T) {
+
+	tt := TermT{
+		Type:  TermJqJson,
+		Value: `halt_error("bad input")`,
+	}
+
+	m, err := tt.NewMatcher()
+	if err != nil {
+		t.Fatalf("Expected nil error, got: %v", err)
+	}
+
+	// Fail path
+	if m(`{"a":"shrubbery"}`) {
+		t.Errorf("Expected no match, got match.")
+	}
+
+}
+
+func TestNewJqJson(t *testing.T) {
+
+	m, err := NewJqJson(`select(.shrubbery == "apple")`)
+	if err != nil {
+		t.Fatalf("Expected nil error, got: %v", err)
+	}
+
+	// Happy path
+	if !m(`{"shrubbery":"apple"}`) {
+		t.Errorf("Expected match, got fail.")
+	}
+
+	// Sad path
+	if m(`{"nope":"apple"}`) {
+		t.Errorf("Expected no match, got match.")
+	}
+}
+
+func TestNewJqJsonBadTerm(t *testing.T) {
+
+	_, err := NewJqJson(`badterm`)
+	if !errors.Is(err, ErrTermCompile) {
+		t.Fatalf("Expected error, got :%v", err)
 	}
 }
 
@@ -95,6 +146,100 @@ func TestMatchYaml(t *testing.T) {
 	// Sad path
 	if m(`nope: apple`) {
 		t.Errorf("Expected no match, got match.")
+	}
+}
+
+func TestMatchRegex(t *testing.T) {
+	tt := TermT{
+		Type:  TermRegex,
+		Value: `[A-Z]+`,
+	}
+
+	m, err := tt.NewMatcher()
+	if err != nil {
+		t.Fatalf("Expected nil error, got: %v", err)
+	}
+
+	// Happy path
+	if !m(`HELLO`) {
+		t.Errorf("Expected match, got fail.")
+	}
+
+	// Sad path
+	if m(`hello`) {
+		t.Errorf("Expected no match, got match.")
+	}
+}
+
+func TestIsRegex(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{input: "apple", expected: false},
+		{input: "a.*e", expected: true},
+		{input: "[A-Z]+", expected: true},
+		{input: "banana?", expected: true},
+		{input: "cherry", expected: false},
+	}
+
+	for _, test := range tests {
+		result := IsRegex(test.input)
+		if result != test.expected {
+			t.Errorf("IsRegex(%q) = %v; want %v", test.input, result, test.expected)
+		}
+	}
+}
+
+func TestTermString(t *testing.T) {
+	terms := []struct {
+		input    TermTypeT
+		expected string
+	}{
+		{TermRaw, termNameRaw},
+		{TermRegex, termNameRegex},
+		{TermJqJson, termNameJqJson},
+		{TermJqYaml, termNameJqYaml},
+		{TermTypeT(999), termNameUnknown},
+	}
+
+	for _, term := range terms {
+		if term.input.String() != term.expected {
+			t.Errorf("Expected %q, got %q", term.expected, term.input.String())
+		}
+	}
+}
+
+func TestTermBadJqExpression(t *testing.T) {
+	tt := TermT{
+		Type:  TermJqYaml,
+		Value: `invalid jq`,
+	}
+	_, err := tt.NewMatcher()
+	if !errors.Is(err, ErrTermCompile) {
+		t.Fatalf("Expected error, got nil")
+	}
+}
+
+func TestTermBadRegexExpression(t *testing.T) {
+	tt := TermT{
+		Type:  TermRegex,
+		Value: `[A-Z`,
+	}
+	_, err := tt.NewMatcher()
+	if !errors.Is(err, ErrTermCompile) {
+		t.Fatalf("Expected error, got nil")
+	}
+}
+
+func TestTermBadType(t *testing.T) {
+	tt := TermT{
+		Type:  TermTypeT(999),
+		Value: `some value`,
+	}
+	_, err := tt.NewMatcher()
+	if !errors.Is(err, ErrTermType) {
+		t.Fatalf("Expected error, got nil")
 	}
 }
 
