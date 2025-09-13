@@ -52,8 +52,7 @@ func (r *MatchSet) Scan(e LogEntry) (hits Hits) {
 			// Append the match to the assert list
 			r.terms[i].asserts = append(r.terms[i].asserts, e)
 
-			// If not a dupe or we've hit the dupe count, set the hot mask
-			if dupeCnt, ok := r.dupeMap[i]; !ok || len(r.terms[i].asserts) >= dupeCnt {
+			if dupeCnt := r.dupeMap[i]; len(r.terms[i].asserts) > dupeCnt {
 				r.hotMask.Set(i)
 			}
 
@@ -75,11 +74,10 @@ func (r *MatchSet) Scan(e LogEntry) (hits Hits) {
 	r.gcMark = disableGC
 	for i, term := range r.terms {
 
-		hitCnt := 1
-		dupeCnt := r.dupeMap[i]
-		if dupeCnt > 0 {
-			hitCnt = dupeCnt
-		}
+		var (
+			dupeCnt = r.dupeMap[i]
+			hitCnt  = 1 + dupeCnt
+		)
 
 		m := term.asserts
 		hits.Logs = append(hits.Logs, m[0:hitCnt]...)
@@ -94,7 +92,7 @@ func (r *MatchSet) Scan(e LogEntry) (hits Hits) {
 			r.hotMask.Clr(i)
 		} else {
 			// Clear the hot mask if there's a dupeCnt and we're under it
-			if len(m) < dupeCnt {
+			if len(m) <= dupeCnt {
 				r.hotMask.Clr(i)
 			}
 
@@ -139,14 +137,13 @@ func (r *MatchSet) GarbageCollect(clock int64) {
 		}
 
 		var (
-			m       = r.terms[i].asserts
-			dupeCnt = r.dupeMap[i]
+			m = r.terms[i].asserts
 		)
 
 		if len(m) == 0 {
 			r.hotMask.Clr(i)
 		} else {
-			if len(m) < dupeCnt {
+			if dupeCnt := r.dupeMap[i]; len(m) <= dupeCnt {
 				r.hotMask.Clr(i)
 			}
 			if v := m[0].Timestamp; v < r.gcMark {
@@ -176,30 +173,14 @@ func buildSetTerms(setTerms ...TermT) ([]termT, map[int]int, error) {
 		terms   = make([]termT, 0, nTerms)
 	)
 
-	// Increment the dupe count for a given index.
-	// The set algorithm expects dupeCnt at index to the the total of terms, not extra dupes.
-	// So instead of storing 1 for a single dupe, store 2.
-	incDupeMap := func(idx int) {
-
-		v, ok := dupeMap[idx]
-
-		switch {
-		case ok:
-			v += 1
-		case dupeMap == nil:
-			dupeMap = make(map[int]int)
-			fallthrough
-		default:
-			v = 2
-		}
-		dupeMap[idx] = v
-	}
-
 	// O(n) on nTerms
 	for _, term := range setTerms {
 
 		if idx, ok := uniqs[term]; ok {
-			incDupeMap(idx)
+			if dupeMap == nil {
+				dupeMap = make(map[int]int)
+			}
+			dupeMap[idx]++
 		} else {
 			m, err := term.NewMatcher()
 			if err != nil {

@@ -38,10 +38,10 @@ type termT struct {
 	asserts []LogEntry
 }
 
-func (r resetT) calcWindow(stamps []int64) (int64, int64) {
+func (r resetT) calcWindow(anchors []anchorT) (int64, int64) {
 	var (
 		width  = r.window
-		anchor = stamps[r.anchor]
+		anchor = anchors[r.anchor].clock
 	)
 
 	// Slide the anchor if necessary
@@ -49,7 +49,7 @@ func (r resetT) calcWindow(stamps []int64) (int64, int64) {
 
 	// Determine the width of the window
 	if !r.absolute {
-		width += stamps[len(stamps)-1] - stamps[0]
+		width += anchors[len(anchors)-1].clock - anchors[0].clock
 	}
 
 	if width <= 0 {
@@ -141,4 +141,14 @@ func shiftAnchor(terms []termT, drop anchorT) int {
 	m = slices.Delete(m, i, i+1)
 	terms[drop.term].asserts = m
 	return len(m)
+}
+
+type anchorT struct {
+	clock  int64
+	term   int
+	offset int
+}
+
+func (a anchorT) ValidTerm() bool {
+	return a.term >= 0
 }

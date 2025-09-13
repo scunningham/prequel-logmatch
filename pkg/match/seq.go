@@ -25,16 +25,16 @@ type MatchSeq struct {
 	dupeMap map[int]int
 }
 
-func NewMatchSeq(window int64, terms ...TermT) (*MatchSeq, error) {
+func NewMatchSeq(window int64, seqTerms ...TermT) (*MatchSeq, error) {
 
-	seqTerms, dupeMap, err := buildSeqTerms(terms...)
+	terms, dupeMap, err := buildSeqTerms(seqTerms...)
 	if err != nil {
 		return nil, err
 	}
 
 	return &MatchSeq{
 		window:  window,
-		terms:   seqTerms,
+		terms:   terms,
 		dupeMap: dupeMap,
 	}, nil
 }
@@ -84,11 +84,11 @@ func (r *MatchSeq) Scan(e LogEntry) (hits Hits) {
 	// We have a full frame; fire and prune.
 
 	hits.Cnt = 1
-	hits.Logs = make([]LogEntry, 0, len(r.terms))
+	hits.Logs = make([]LogEntry, 0, len(r.terms)+r.dupeMap[-1])
 
 	for i := range len(r.terms) - 1 {
 		hitCnt := r.dupeMap[i] + 1
-		hits.Logs = append(hits.Logs, r.terms[i].asserts[0:hitCnt]...)
+		hits.Logs = append(hits.Logs, r.terms[i].asserts[:hitCnt]...)
 
 		// Only remove the first item; leave remaining dupes for next match.
 		shiftLeft(r.terms, i, 1)
@@ -231,6 +231,7 @@ func buildSeqTerms(seqTerms ...TermT) ([]termT, map[int]int, error) {
 		i        = -1
 		lastTerm TermT
 		dupeMap  map[int]int
+		dupeSum  int
 		nTerms   = len(seqTerms)
 		terms    = make([]termT, 0, nTerms)
 	)
@@ -253,11 +254,17 @@ func buildSeqTerms(seqTerms ...TermT) ([]termT, map[int]int, error) {
 			fallthrough
 		default:
 			dupeMap[i]++
+			dupeSum++
 		}
 	}
 
 	if len(terms) > maxTerms {
 		return nil, nil, ErrTooManyTerms
+	}
+
+	// Stuff dupeSum in dupeMap as an optimization
+	if dupeSum > 0 {
+		dupeMap[-1] = dupeSum
 	}
 
 	// Check if over allocated due to dupes
