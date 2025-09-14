@@ -532,6 +532,38 @@ func TestSeqInverse(t *testing.T) {
 			},
 		},
 
+		"DupesWithResetMissOnAnchor": {
+			// -123--------- alpha
+			// -123--------- alpha
+			// -123--------- alpha
+			// ----4-----6-- beta
+			// ---------5--- reset
+			window: 10,
+			terms: []string{
+				"alpha",
+				"alpha",
+				"alpha",
+				"beta",
+			},
+			reset: []ResetT{
+				{
+					Term:     makeRaw("reset"),
+					Window:   20,
+					Anchor:   2,
+					Absolute: true,
+				},
+			},
+			steps: []step{
+				{line: "alpha1"},
+				{line: "alpha2"},
+				{line: "alpha3"},
+				{line: "beta1"},
+				{line: "reset", stamp: 21},
+				{line: "beta2", stamp: 22},
+				{line: "noop", stamp: 1000},
+			},
+		},
+
 		"GCOldTerms": {
 			// -1------4--------------10----------
 			// ---2--3----------8---9-----11----
