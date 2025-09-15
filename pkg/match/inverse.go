@@ -89,11 +89,6 @@ func calcGCWindow(window int64, resets []resetT) (int64, int64) {
 			left = reset.slide
 		}
 	}
-	// Add tick to right because we will need to assert tick one past the reset window,
-	// to establish that no reset occurred as a duplicate timestamp event at the end of the reset window.
-	if len(resets) > 0 {
-		right += 1
-	}
 
 	return (-1 * left), right
 }

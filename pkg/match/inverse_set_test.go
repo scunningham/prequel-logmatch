@@ -526,7 +526,7 @@ func TestSetInverse(t *testing.T) {
 				{line: "reset"},
 				{line: "reset"},
 				{line: "reset", postF: checkResets[InverseSet](0, 3)},
-				{line: "NOOP", stamp: 72, postF: checkResets[InverseSet](0, 3)}, // window + reset window + 2 * abs(slide) + first reset + 1 for overlap
+				{line: "NOOP", stamp: 71, postF: checkResets[InverseSet](0, 3)}, // window + reset window + 1
 				{line: "NOOP", postF: checkResets[InverseSet](0, 2)},            // should peel off one reset
 				{line: "NOOP", postF: checkResets[InverseSet](0, 1)},            // should peel off one reset
 				{line: "NOOP", postF: checkResets[InverseSet](0, 0)},            // should peel off one reset

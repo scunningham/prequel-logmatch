@@ -616,7 +616,6 @@ func TestSeqInverse(t *testing.T) {
 				{line: "reset"},
 				{line: "reset", postF: checkResets[InverseSeq](0, 3)},                    // Reset terms with nothing hot w/o lookback have been optimized out.
 				{line: "NOOP", stamp: 1 + 50 + 20, postF: checkResets[InverseSeq](0, 3)}, // Emit noop at full GC window (see calcGCWindow)}, should have some negative terms
-				{line: "NOOP", postF: checkResets[InverseSeq](0, 3)},                     // Must be past window to GC (TODO: validate this)
 				{line: "NOOP", postF: checkResets[InverseSeq](0, 2)},                     // Emit noop right after window, should have peeled off one term
 				{line: "NOOP", postF: checkResets[InverseSeq](0, 1)},                     // Emit noop right after window, should have peeled off one term
 				{line: "NOOP", postF: checkResets[InverseSeq](0, 0)},                     // Emit noop right after window, should have peeled off one term
@@ -795,6 +794,22 @@ func TestSeqInverse(t *testing.T) {
 				{line: "7_beta"},
 				{line: "8_beta"},
 				{line: "8_fire", stamp: 8, cb: matchLines("3_alpha", "4_alpha", "6_beta", "7_beta", "8_fire")},
+			},
+		},
+
+		"SimpleResetWindow": {
+			window: 2,
+			terms:  []string{"alpha", "beta"},
+			reset: []ResetT{
+				{
+					Term: makeRaw("reset"),
+				},
+			},
+			steps: []step{
+				{line: "alpha"},
+				{line: "reset", stamp: 1},
+				{line: "NOOP", stamp: 3, postF: checkResets[InverseSeq](0, 1)},
+				{line: "NOOP", stamp: 4, postF: checkResets[InverseSeq](0, 0)},
 			},
 		},
 	}
